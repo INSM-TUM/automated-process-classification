@@ -154,7 +154,7 @@ fn check_rule_s1(p: &CalculatedPercentages) -> RuleCheckResult {
 fn check_rule_s2(p: &CalculatedPercentages) -> RuleCheckResult {
     let conds = vec![
         p.none_none < 0.05,
-        p.none_implication <= 0.20,
+        p.none_implication <= 0.15,
         p.eventual_equivalence >= 0.10,
         p.eventual_implication > 0.30,
     ];
