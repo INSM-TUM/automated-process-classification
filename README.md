@@ -164,6 +164,10 @@ cargo run -- --help
 | [chrono](https://crates.io/crates/chrono) | Date and time library for Rust, used for handling timestamps in event logs. |
 | [serde](https://crates.io/crates/serde) | A framework for serializing and deserializing Rust data structures efficiently. |
 
+## 📜 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
 ## 👏 Acknowledgments
 
 - Thanks to the contributors of the Rust and Yew communities for their support and tools
