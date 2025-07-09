@@ -3,14 +3,16 @@ mod dependency_types;
 mod matrix_generation;
 mod parser;
 
-use classification::{classify_matrix, Classification as MatrixClassification, InputMatrix, CalculatedPercentages};
+use classification::{
+    classify_matrix, ClassificationOutput, CalculatedPercentages,
+};
 use matrix_generation::generate_dependency_matrix;
 use parser::parse_into_traces;
 
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{File, HtmlInputElement, MouseEvent, ProgressEvent, FileReader, Event, InputEvent};
+use web_sys::{HtmlInputElement, MouseEvent, ProgressEvent, FileReader, Event, InputEvent};
 use yew::prelude::*;
 use clap::Parser;
 
@@ -41,12 +43,12 @@ enum AppError {
 }
 
 enum AppMessage {
-    FileSelected(Option<File>),
+    FileSelected(Option<String>),
     FileLoaded(Result<String, String>),
     ExistentialThresholdChanged(String),
     TemporalThresholdChanged(String),
     ProcessLog,
-    SetClassificationResult(Result<MatrixClassification, AppError>),
+    SetClassificationResult(Result<ClassificationOutput, AppError>),
 }
 
 #[derive(Clone, PartialEq)]
@@ -55,7 +57,7 @@ struct AppState {
     file_content: Option<String>,
     existential_threshold_str: String, // Store as String
     temporal_threshold_str: String,    // Store as String
-    classification_result: Option<Result<MatrixClassification, AppError>>,
+    classification_result: Option<Result<ClassificationOutput, AppError>>,
     is_processing: bool,
 }
 
@@ -85,9 +87,9 @@ fn app() -> Html {
         Rc::new(move |msg: AppMessage| {
             let mut new_state = (*app_state_handle).clone();
             match msg {
-                AppMessage::FileSelected(file_opt) => {
-                    if let Some(file) = file_opt {
-                        new_state.file_name = Some(file.name());
+                AppMessage::FileSelected(file_name_opt) => {
+                    if let Some(file_name) = file_name_opt {
+                        new_state.file_name = Some(file_name);
                         new_state.file_content = None;
                         new_state.classification_result = None;
                     } else {
@@ -99,17 +101,18 @@ fn app() -> Html {
                 AppMessage::FileLoaded(result) => {
                     match result {
                         Ok(content) => new_state.file_content = Some(content),
-                        Err(err_msg) => {
-                            new_state.file_content = None;
-                            new_state.classification_result = Some(Err(AppError::FileReadError(err_msg)));
+                        Err(e) => {
+                            new_state.classification_result =
+                                Some(Err(AppError::FileReadError(e)));
                         }
                     }
+                    new_state.is_processing = false;
                 }
                 AppMessage::ExistentialThresholdChanged(val_str) => {
-                    new_state.existential_threshold_str = val_str; // Just update string
+                    new_state.existential_threshold_str = val_str;
                 }
                 AppMessage::TemporalThresholdChanged(val_str) => {
-                    new_state.temporal_threshold_str = val_str; // Just update string
+                    new_state.temporal_threshold_str = val_str;
                 }
                 AppMessage::ProcessLog => {
                     new_state.is_processing = true;
@@ -130,37 +133,27 @@ fn app() -> Html {
             let input: HtmlInputElement = e.target_unchecked_into();
             if let Some(files) = input.files() {
                 if let Some(file) = files.get(0) {
-                    dispatch(AppMessage::FileSelected(Some(file.clone())));
-                    
-                    let reader = FileReader::new().expect("Failed to create FileReader");
-                    let dispatch_clone_for_load = dispatch.clone();
-                    let onload = Closure::wrap(Box::new(move |event: ProgressEvent| {
-                        let reader_res: FileReader = event.target_unchecked_into();
-                        match reader_res.result() {
-                            Ok(content_val) => {
-                                if let Some(content_str) = content_val.as_string() {
-                                    dispatch_clone_for_load(AppMessage::FileLoaded(Ok(content_str)));
-                                } else {
-                                    dispatch_clone_for_load(AppMessage::FileLoaded(Err("Content is not a string".to_string())));
-                                }
-                            }
-                            Err(err) => {
-                                dispatch_clone_for_load(AppMessage::FileLoaded(Err(format!("{:?}", err))));
-                            }
-                        }
-                    }) as Box<dyn FnMut(ProgressEvent)>);
+                    let file_name = file.name();
+                    dispatch(AppMessage::FileSelected(Some(file_name)));
+
+                    let reader = FileReader::new().unwrap();
+                    let dispatch_clone = dispatch.clone();
+                    let onload = Closure::wrap(Box::new(move |e: ProgressEvent| {
+                        let reader: FileReader = e.target().unwrap().dyn_into().unwrap();
+                        let content = reader.result().unwrap().as_string().unwrap();
+                        dispatch_clone(AppMessage::FileLoaded(Ok(content)));
+                    }) as Box<dyn FnMut(_)>);
+
                     reader.set_onload(Some(onload.as_ref().unchecked_ref()));
-                    if reader.read_as_text(&file).is_err() {
-                         dispatch(AppMessage::FileLoaded(Err("Failed to initiate file read".to_string())));
-                    }
-                    onload.forget();
+                    reader.read_as_text(&file).unwrap();
+                    onload.forget(); // Prevent closure from being dropped
                 } else {
-                     dispatch(AppMessage::FileSelected(None));
+                    dispatch(AppMessage::FileSelected(None));
                 }
             }
         })
     };
-    
+
     let on_existential_threshold_change = {
         let dispatch = dispatch.clone();
         Callback::from(move |e: InputEvent| {
@@ -185,40 +178,34 @@ fn app() -> Html {
             let temp_thresh_opt = parse_threshold_str(&app_state_snapshot.temporal_threshold_str);
             let ex_thresh_opt = parse_threshold_str(&app_state_snapshot.existential_threshold_str);
 
-            if app_state_snapshot.file_content.is_some() && 
-               !app_state_snapshot.is_processing &&
-               temp_thresh_opt.is_some() && // Crucial check here
-               ex_thresh_opt.is_some()     // Crucial check here
+            if app_state_snapshot.file_content.is_some()
+                && !app_state_snapshot.is_processing
+                && temp_thresh_opt.is_some()
+                && ex_thresh_opt.is_some()
             {
                 dispatch(AppMessage::ProcessLog);
-                
+
                 let content_clone = app_state_snapshot.file_content.clone().unwrap();
                 let temp_thresh_val = temp_thresh_opt.unwrap(); // Safe due to check above
-                let ex_thresh_val = ex_thresh_opt.unwrap();   // Safe due to check above
-                
-                let dispatch_for_result = dispatch.clone();
+                let ex_thresh_val = ex_thresh_opt.unwrap();
+                let dispatch_clone = dispatch.clone();
 
                 spawn_local(async move {
-                    let classification_task_result = async move {
-                        let traces = parse_into_traces(None, Some(&content_clone))
-                            .map_err(|e| AppError::XesParseError(e.to_string()))?;
-                        
-                        if traces.is_empty() {
-                            return Err(AppError::XesParseError("No traces found in log.".to_string()));
-                        }
-
-                        let matrix: InputMatrix = generate_dependency_matrix(
-                            &traces,
-                            ex_thresh_val,
-                            temp_thresh_val,
-                        );
-                        
-                        match classify_matrix(&matrix) {
-                            MatrixClassification::Error(e_str) => Err(AppError::ClassificationError(e_str)),
-                            other_classification => Ok(other_classification),
-                        }
-                    }.await;
-                    dispatch_for_result(AppMessage::SetClassificationResult(classification_task_result));
+                    let result = {
+                        let traces_result = parse_into_traces(None, Some(&content_clone));
+                        traces_result
+                            .map_err(|e| AppError::XesParseError(e.to_string()))
+                            .and_then(|traces| {
+                                let matrix = generate_dependency_matrix(
+                                    &traces,
+                                    temp_thresh_val,
+                                    ex_thresh_val,
+                                );
+                                let classification_output = classify_matrix(&matrix);
+                                Ok(classification_output)
+                            })
+                    };
+                    dispatch_clone(AppMessage::SetClassificationResult(result));
                 });
             }
         })
@@ -275,33 +262,35 @@ fn app() -> Html {
 
             <button
                 onclick={on_process_log}
-                disabled={is_process_button_disabled} // Use the new combined condition
+                disabled={is_process_button_disabled}
                 style="padding: 10px 15px; font-size: 1em; cursor: pointer;"
             >
                 { if current_app_state_for_view.is_processing { "Processing..." } else { "Process Log" } }
             </button>
 
-             <div class="results" style="margin-top: 30px;">
-                <h2>{ "Classification Result" }</h2>
-                {
-                    if current_app_state_for_view.is_processing {
-                        html! { <p>{ "Processing log, please wait..." }</p> }
-                    } else {
-                        match current_app_state_for_view.classification_result {
-                            Some(Ok(classification)) => html! {
-                                <p style="font-size: 1.2em; color: green;">{ format!("{:?}", classification) }</p>
-                            },
-                            Some(Err(err)) => html! {
-                                <p style="font-size: 1.2em; color: red;">{ format!("Error: {}", err) }</p>
-                            },
-                            None => html! {
-                                <p>{ "Upload and process a log to see results." }</p>
-                            }
+            { // Display classification result
+                if let Some(result) = &current_app_state_for_view.classification_result {
+                    match result {
+                        Ok(output) => html! {
+                            <div class="result" style="margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px;">
+                                <h2 style="margin-top: 0;">{ "Classification Result" }</h2>
+                                <p><b>{ "Classification:" }</b> { &output.classification.to_string() }</p>
+                                <h3>{ "Matched Rules:" }</h3>
+                                <ul>
+                                    { for output.matched_rules.iter().map(|rule| html!{ <li>{ rule }</li> }) }
+                                </ul>
+                            </div>
+                        },
+                        Err(e) => html! {
+                            <div class="error" style="color: red; margin-top: 20px;">
+                                { format!("Error: {}", e) }
+                            </div>
                         }
                     }
+                } else {
+                    html!{}
                 }
-            </div>
-
+            }
         </div>
     }
 }
@@ -326,16 +315,19 @@ fn main() {
 
         match parse_into_traces(Some(&file_path), None) {
             Ok(traces) => {
-                let matrix = generate_dependency_matrix(&traces, existential_threshold, temporal_threshold);
-                let classification_result = classify_matrix(&matrix);
-                println!("Classification Result: {}", classification_result);
+                let matrix =
+                    generate_dependency_matrix(&traces, temporal_threshold, existential_threshold);
+                let classification_output = classify_matrix(&matrix);
+                println!(
+                    "Classification: {}",
+                    classification_output.classification.to_string()
+                );
+                println!("Matched Rules: {:?}", classification_output.matched_rules);
 
                 if args.print_ratios {
                     match CalculatedPercentages::new(&matrix) {
                         Ok(percentages) => {
-                            // TODO: implement Display trait for CalculatedPercentages
-                            println!("
-Calculated Percentages:");
+                            println!("Calculated Percentages:");
                             println!("{:?}", percentages);
                         }
                         Err(e) => {

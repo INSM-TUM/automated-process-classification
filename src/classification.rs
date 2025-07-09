@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 pub type Activity = String;
 pub type InputMatrix = HashMap<(Activity, Activity), Dependency>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Classification {
     Structured,
     SemiStructured,
@@ -35,7 +35,13 @@ impl std::fmt::Display for Classification {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ClassificationOutput {
+    pub classification: Classification,
+    pub matched_rules: Vec<String>,
+}
+
+#[derive(Debug, Default, Serialize, Clone, PartialEq)]
 pub struct CalculatedPercentages {
     // Primary Rule related percentages
     none_none: f64,
@@ -242,62 +248,65 @@ fn check_rule_ls2(p: &CalculatedPercentages) -> RuleCheckResult {
     (conds.iter().all(|&c| c), conds)
 }
 
-fn apply_primary_rules(p: &CalculatedPercentages) -> (HashSet<RuleCategory>, Vec<RuleCheckResult>) {
+fn apply_primary_rules(
+    p: &CalculatedPercentages,
+) -> (HashSet<RuleCategory>, Vec<RuleCheckResult>, Vec<String>) {
     // println!("Applying primary rules...");
     let mut matched_categories = HashSet::new();
     let mut rule_results = Vec::new();
+    let mut matched_rules = Vec::new();
 
     let s1_res = check_rule_s1(p);
     if s1_res.0 {
-        // println!("S1 rule matched!");
         matched_categories.insert(RuleCategory::Structured);
+        matched_rules.push("S1".to_string());
     }
     rule_results.push(s1_res);
 
     let s2_res = check_rule_s2(p);
     if s2_res.0 {
-        // println!("S2 rule matched!");
         matched_categories.insert(RuleCategory::Structured);
+        matched_rules.push("S2".to_string());
     }
     rule_results.push(s2_res);
 
     let s3_res = check_rule_s3(p);
     if s3_res.0 {
-        // println!("S3 rule matched!");
         matched_categories.insert(RuleCategory::Structured);
+        matched_rules.push("S3".to_string());
     }
     rule_results.push(s3_res);
 
     let ss1_res = check_rule_ss1(p);
     if ss1_res.0 {
-        // println!("SS1 rule matched!");
         matched_categories.insert(RuleCategory::SemiStructured);
+        matched_rules.push("SS1".to_string());
     }
     rule_results.push(ss1_res);
 
     let ss2_res = check_rule_ss2(p);
     if ss2_res.0 {
-        // println!("SS2 rule matched!");
         matched_categories.insert(RuleCategory::SemiStructured);
+        matched_rules.push("SS2".to_string());
     }
     rule_results.push(ss2_res);
 
     let ls1_res = check_rule_ls1(p);
     if ls1_res.0 {
-        // println!("LS1 rule matched!");
         matched_categories.insert(RuleCategory::LooselyStructured);
+        matched_rules.push("LS1".to_string());
     }
     rule_results.push(ls1_res);
 
     let ls2_res = check_rule_ls2(p);
     if ls2_res.0 {
-        // println!("LS2 rule matched!");
         matched_categories.insert(RuleCategory::LooselyStructured);
+        matched_rules.push("LS2".to_string());
     }
     rule_results.push(ls2_res);
 
     // println!("Primary rules matched categories: {:?}", matched_categories);
-    (matched_categories, rule_results)
+    (matched_categories, rule_results, matched_rules)
 }
 
 fn check_rule_bs1(p: &CalculatedPercentages) -> RuleCheckResult {
@@ -331,29 +340,33 @@ fn check_rule_bl1(p: &CalculatedPercentages) -> RuleCheckResult {
 
 fn apply_secondary_rules(
     p: &CalculatedPercentages,
-) -> (HashSet<RuleCategory>, Vec<RuleCheckResult>) {
+) -> (HashSet<RuleCategory>, Vec<RuleCheckResult>, Vec<String>) {
     // println!("Applying secondary rules...");
     let mut matched_categories = HashSet::new();
     let mut rule_results = Vec::new();
+    let mut matched_rules = Vec::new();
 
     let bs1_res = check_rule_bs1(p);
     if bs1_res.0 {
-        // println!("BS1 rule matched!");
         matched_categories.insert(RuleCategory::Structured);
+        matched_categories.insert(RuleCategory::SemiStructured);
+        matched_rules.push("BS1".to_string());
     }
     rule_results.push(bs1_res);
 
     let bs2_res = check_rule_bs2(p);
     if bs2_res.0 {
-        // println!("BS2 rule matched!");
+        matched_categories.insert(RuleCategory::Structured);
         matched_categories.insert(RuleCategory::SemiStructured);
+        matched_rules.push("BS2".to_string());
     }
     rule_results.push(bs2_res);
 
     let bl1_res = check_rule_bl1(p);
     if bl1_res.0 {
-        // println!("BL1 rule matched!");
+        matched_categories.insert(RuleCategory::SemiStructured);
         matched_categories.insert(RuleCategory::LooselyStructured);
+        matched_rules.push("BL1".to_string());
     }
     rule_results.push(bl1_res);
 
@@ -361,30 +374,29 @@ fn apply_secondary_rules(
     //     "Secondary rules matched categories: {:?}",
     //     matched_categories
     // );
-    (matched_categories, rule_results)
+    (matched_categories, rule_results, matched_rules)
 }
 
 fn calculate_by_most_indicators(
-    primary_rule_check_results: &[RuleCheckResult],
     secondary_rule_check_results: &[RuleCheckResult],
 ) -> Classification {
     // println!("Calculating by most indicators...");
     let count_true_conditions = |bools: &[bool]| bools.iter().filter(|&&b| b).count();
 
-    let s1_indicators = count_true_conditions(&primary_rule_check_results[0].1);
-    let s2_indicators = count_true_conditions(&primary_rule_check_results[1].1);
-    let s3_indicators = count_true_conditions(&primary_rule_check_results[2].1);
-    let bs1_indicators = count_true_conditions(&secondary_rule_check_results[0].1);
+    let s1_indicators = count_true_conditions(&secondary_rule_check_results[0].1);
+    let s2_indicators = count_true_conditions(&secondary_rule_check_results[1].1);
+    let s3_indicators = count_true_conditions(&secondary_rule_check_results[2].1);
+    let bs1_indicators = count_true_conditions(&secondary_rule_check_results[3].1);
     let score_structured = (s1_indicators + s2_indicators + s3_indicators) * 2 + bs1_indicators;
 
-    let ss1_indicators = count_true_conditions(&primary_rule_check_results[3].1);
-    let ss2_indicators = count_true_conditions(&primary_rule_check_results[4].1);
-    let bs2_indicators = count_true_conditions(&secondary_rule_check_results[1].1);
+    let ss1_indicators = count_true_conditions(&secondary_rule_check_results[3].1);
+    let ss2_indicators = count_true_conditions(&secondary_rule_check_results[4].1);
+    let bs2_indicators = count_true_conditions(&secondary_rule_check_results[5].1);
     let score_semi_structured = (ss1_indicators + ss2_indicators) * 2 + bs2_indicators;
 
-    let ls1_indicators = count_true_conditions(&primary_rule_check_results[5].1);
-    let ls2_indicators = count_true_conditions(&primary_rule_check_results[6].1);
-    let bl1_indicators = count_true_conditions(&secondary_rule_check_results[2].1);
+    let ls1_indicators = count_true_conditions(&secondary_rule_check_results[6].1);
+    let ls2_indicators = count_true_conditions(&secondary_rule_check_results[7].1);
+    let bl1_indicators = count_true_conditions(&secondary_rule_check_results[8].1);
     let score_loosely_structured = (ls1_indicators + ls2_indicators) * 2 + bl1_indicators;
 
     let scores = [
@@ -449,93 +461,90 @@ fn calculate_by_most_indicators(
     }
 }
 
-pub fn classify_matrix(matrix: &InputMatrix) -> Classification {
-    // println!("Starting classification...");
+pub fn classify_matrix(matrix: &InputMatrix) -> ClassificationOutput {
     let percentages = match CalculatedPercentages::new(matrix) {
-        Ok(p) => {
-            // println!("Calculated percentages: {:?}", p);
-            p
-        }
+        Ok(p) => p,
         Err(e) => {
-            // println!("Error calculating percentages: {}", e);
-            return Classification::Error(e);
+            return ClassificationOutput {
+                classification: Classification::Error(e),
+                matched_rules: vec![],
+            }
         }
     };
 
-    // println!("Checking unstructured rules...");
+    let mut matched_rules = Vec::new();
+
     if check_rule_u1(&percentages) {
-        // println!("U1 rule matched - returning Unstructured");
-        return Classification::Unstructured;
+        matched_rules.push("U1".to_string());
     }
-
     if check_rule_u2(&percentages) {
-        // println!("U2 rule matched - returning Unstructured");
-        return Classification::Unstructured;
+        matched_rules.push("U2".to_string());
     }
 
-    // println!("Applying primary rules...");
-    let (primary_matched_categories_set, primary_rule_results_for_indicators) =
-        apply_primary_rules(&percentages);
-
-    match primary_matched_categories_set.len() {
-        0 => {
-            // println!("No primary rules matched");
-        }
-        1 => {
-            let category = primary_matched_categories_set.iter().next().unwrap();
-            // println!("Single primary rule matched: {:?}", category);
-            return category_to_classification(*category);
-        }
-        _ => {
-            // println!(
-            //     "Multiple primary rules matched: {:?}",
-            //     primary_matched_categories_set
-            // );
-            let s_matched = primary_matched_categories_set.contains(&RuleCategory::Structured);
-            let ss_matched = primary_matched_categories_set.contains(&RuleCategory::SemiStructured);
-            let ls_matched =
-                primary_matched_categories_set.contains(&RuleCategory::LooselyStructured);
-
-            if s_matched && ss_matched && !ls_matched {
-                // println!("Structured and SemiStructured matched");
-                return Classification::StructuredSemiStructured;
-            } else if !s_matched && ss_matched && ls_matched {
-                // println!("SemiStructured and LooselyStructured matched");
-                return Classification::SemiStructuredLooselyStructured;
-            } else if s_matched && !ss_matched && ls_matched {
-                // println!("Structured and LooselyStructured matched");
-            } else if s_matched && ss_matched && ls_matched {
-                // println!("All three primary categories matched");
-            }
-        }
+    if !matched_rules.is_empty() {
+        return ClassificationOutput {
+            classification: Classification::Unstructured,
+            matched_rules,
+        };
     }
 
-    // println!("Applying secondary rules...");
-    let (secondary_matched_categories_set, secondary_rule_results_for_indicators) =
-        apply_secondary_rules(&percentages);
+    let (primary_matched, _, primary_rules) = apply_primary_rules(&percentages);
+    matched_rules.extend(primary_rules);
 
-    match secondary_matched_categories_set.len() {
-        0 => {
-            // println!("No secondary rules matched");
-        }
-        1 => {
-            if primary_matched_categories_set.is_empty() || primary_matched_categories_set.len() > 1
-            {
-                let category = secondary_matched_categories_set.iter().next().unwrap();
-                // println!("Single secondary rule matched: {:?}", category);
-                return category_to_classification(*category);
-            }
-        }
-        _ => {
-            // println!("Multiple secondary rules matched");
+    if primary_matched.len() == 1 {
+        return ClassificationOutput {
+            classification: category_to_classification(*primary_matched.iter().next().unwrap()),
+            matched_rules,
+        };
+    }
+
+    if primary_matched.is_empty() {
+        let (secondary_matched, secondary_results, secondary_rules) =
+            apply_secondary_rules(&percentages);
+        matched_rules.extend(secondary_rules);
+
+        if secondary_matched.len() == 1 {
+            return ClassificationOutput {
+                classification: category_to_classification(
+                    *secondary_matched.iter().next().unwrap(),
+                ),
+                matched_rules,
+            };
+        } else if secondary_matched.len() > 1 {
+            return ClassificationOutput {
+                classification: calculate_by_most_indicators(&secondary_results),
+                matched_rules,
+            };
+        } else {
+            return ClassificationOutput {
+                classification: Classification::Unstructured,
+                matched_rules: vec!["No rules matched".to_string()],
+            };
         }
     }
 
-    // println!("Falling back to most indicators calculation");
-    calculate_by_most_indicators(
-        &primary_rule_results_for_indicators,
-        &secondary_rule_results_for_indicators,
-    )
+    if primary_matched.contains(&RuleCategory::Structured)
+        && primary_matched.contains(&RuleCategory::SemiStructured)
+    {
+        return ClassificationOutput {
+            classification: Classification::StructuredSemiStructured,
+            matched_rules,
+        };
+    }
+
+    if primary_matched.contains(&RuleCategory::SemiStructured)
+        && primary_matched.contains(&RuleCategory::LooselyStructured)
+    {
+        return ClassificationOutput {
+            classification: Classification::SemiStructuredLooselyStructured,
+            matched_rules,
+        };
+    }
+
+    ClassificationOutput {
+        classification: Classification::Unstructured,
+        matched_rules: vec!["Complex case not covered".to_string()],
+    }
 }
 
 // ... [rest of the code remains the same] ...
