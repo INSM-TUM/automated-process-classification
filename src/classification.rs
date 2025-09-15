@@ -1,3 +1,11 @@
+fn check_rule_ss3(p: &CalculatedPercentages) -> RuleCheckResult {
+    let conds = vec![
+        p.none_none < 0.10,
+        p.eventual_implication < 0.25,
+        p.direct_any_existential < 0.15,
+    ];
+    (conds.iter().all(|&c| c), conds)
+}
 use crate::dependency_types::{
     dependency::Dependency, existential::DependencyType as ExistentialEnum,
     temporal::DependencyType as TemporalEnum,
@@ -290,6 +298,13 @@ fn apply_primary_rules(
         matched_rules.push("SS2".to_string());
     }
     rule_results.push(ss2_res);
+
+    let ss3_res = check_rule_ss3(p);
+    if ss3_res.0 {
+        matched_categories.insert(RuleCategory::SemiStructured);
+        matched_rules.push("SS3".to_string());
+    }
+    rule_results.push(ss3_res);
 
     let ls1_res = check_rule_ls1(p);
     if ls1_res.0 {
