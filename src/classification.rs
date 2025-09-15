@@ -718,7 +718,7 @@ mod tests {
     fn test_empty_matrix() {
         let matrix = InputMatrix::new();
         assert_eq!(
-            classify_matrix(&matrix),
+            classify_matrix(&matrix).classification,
             Classification::Error("Input matrix is empty".to_string())
         );
     }
@@ -729,7 +729,7 @@ mod tests {
         // Counts: [NN, NI, NEq, NNEq, DN, DI, DEq, EN, EI, EEq]
         let counts = [81, 0, 0, 0, 5, 0, 0, 5, 0, 0]; // NN=81%, DN=5%, EN=5%. EventualAny=5%, DirectAny=5%
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Unstructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Unstructured);
     }
 
     #[test]
@@ -737,7 +737,7 @@ mod tests {
         // U2: (None, Equivalence) > 80%
         let counts = [0, 0, 81, 0, 0, 0, 0, 0, 0, 19]; // NEq = 81%, fill with EEq
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Unstructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Unstructured);
     }
 
     #[test]
@@ -750,7 +750,7 @@ mod tests {
         // Remainder: 100 - 4 - 9 - 11 - 41 = 35
         let counts = [4, 9, 0, 0, 35, 0, 0, 0, 41, 11]; // NN=4%, NI=9%, EEq=11%, EI=41%, Fill with DN=35%
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 
     #[test]
@@ -764,7 +764,7 @@ mod tests {
         // SS1: NN < 35% (ok), NI > 30% (ok), EEq < 5% (ok, EEq=0 if we put remainder elsewhere or EEq=40 if here), EI < 20% (ok).
         //   If EEq=40%, SS1 fails. If EEq=0, then SS1 might match.
         //   Let's assume it falls through to secondary.
-        assert_eq!(classify_matrix(&matrix), Classification::SemiStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::SemiStructured);
     }
 
     // Synthetic logs tests
@@ -772,91 +772,91 @@ mod tests {
     fn test_log01_structured() {
         let counts = [0, 0, 7, 13, 0, 13, 7, 0, 47, 13]; // nn,ni,neq,nneq, dn,di,deq, en,ei,eeq
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 
     #[test]
     fn test_log04_structured() {
         let counts = [0, 0, 7, 7, 0, 13, 0, 0, 40, 33];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 
     #[test]
     fn test_log05_structured() {
         let counts = [0, 0, 0, 27, 53, 0, 0, 7, 13, 0];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 
     #[test]
     fn test_log09_unstructured() {
         let counts = [0, 0, 100, 0, 0, 0, 0, 0, 0, 0];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Unstructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Unstructured);
     }
 
     #[test]
     fn test_log06_semistructured() {
         let counts = [0, 28, 5, 0, 0, 0, 10, 0, 0, 57];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::SemiStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::SemiStructured);
     }
 
     #[test]
     fn test_log02_semistructured() {
         let counts = [13, 47, 13, 7, 0, 13, 7, 0, 0, 0];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::SemiStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::SemiStructured);
     }
 
     #[test]
     fn test_log07_semistructured() {
         let counts = [6, 21, 11, 3, 0, 11, 6, 0, 17, 25];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::SemiStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::SemiStructured);
     }
 
     #[test]
     fn test_log10_semistructured() {
         let counts = [5, 19, 5, 0, 0, 0, 5, 0, 28, 38];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::SemiStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::SemiStructured);
     }
 
     #[test]
     fn test_log03_looselystructured() {
         let counts = [60, 7, 7, 13, 0, 0, 0, 0, 13, 0];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::LooselyStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::LooselyStructured);
     }
 
     #[test]
     fn test_log08_looselystructured() {
         let counts = [23, 14, 0, 14, 0, 10, 0, 10, 24, 5];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::LooselyStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::LooselyStructured);
     }
 
     #[test]
     fn test_log11_looselystructured() {
         let counts = [66, 7, 7, 0, 0, 0, 0, 0, 20, 0];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::LooselyStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::LooselyStructured);
     }
 
     #[test]
     fn test_log12_structured() {
         let counts = [0, 0, 6, 35, 3, 14, 0, 6, 25, 11];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 
     #[test]
     fn test_log13_semistructured() {
         let counts = [22, 2, 2, 16, 0, 0, 0, 15, 30, 13];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::SemiStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::SemiStructured);
     }
 
     #[test]
@@ -864,7 +864,7 @@ mod tests {
         let counts = [33, 33, 0, 17, 0, 0, 0, 0, 17, 0];
         let matrix = build_detailed_matrix_from_counts_array(counts);
         assert_eq!(
-            classify_matrix(&matrix),
+            classify_matrix(&matrix).classification,
             Classification::SemiStructuredLooselyStructured
         );
     }
@@ -873,34 +873,34 @@ mod tests {
     fn test_log15_structured() {
         let counts = [0, 0, 8, 8, 0, 11, 3, 11, 44, 15];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 
     #[test]
     fn test_log16_looselystructured() {
         let counts = [80, 0, 10, 0, 0, 0, 0, 10, 0, 0]; // Counts: NN, NI, NEq, NNEq, DN, DI, DEq, EN, EI, EEq
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::LooselyStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::LooselyStructured);
     }
 
     #[test]
     fn test_log17_semistructured() {
         let counts = [14, 33, 3, 0, 0, 0, 3, 0, 22, 25];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::SemiStructured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::SemiStructured);
     }
 
     #[test]
     fn test_log18_structured() {
         let counts = [0, 20, 20, 0, 0, 0, 0, 10, 40, 10];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 
     #[test]
     fn test_log19_structured() {
         let counts = [0, 20, 20, 10, 0, 0, 0, 0, 40, 10];
         let matrix = build_detailed_matrix_from_counts_array(counts);
-        assert_eq!(classify_matrix(&matrix), Classification::Structured);
+    assert_eq!(classify_matrix(&matrix).classification, Classification::Structured);
     }
 }
